@@ -25,6 +25,20 @@ function isPrismaKnownRequestError(
   );
 }
 
+function getProviderStatus(value: unknown): number | undefined {
+  if (!value || typeof value !== 'object' || !('response' in value)) {
+    return undefined;
+  }
+  const response = (value as { response?: unknown }).response;
+  if (!response || typeof response !== 'object' || !('status' in response)) {
+    return undefined;
+  }
+  const status = (response as { status?: unknown }).status;
+  return typeof status === 'number' && status >= 500 && status <= 599
+    ? status
+    : undefined;
+}
+
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
@@ -107,6 +121,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
           message = 'Database error';
           code = 'DB_ERROR';
       }
+    } else if (getProviderStatus(exception)) {
+      status = getProviderStatus(exception)!;
+      message = 'Upstream provider unavailable';
+      code = 'PROVIDER_ERROR';
+    } else {
+      code = 'INTERNAL_SERVER_ERROR';
     }
 
     const logMessage = `${method} ${path} ${status} — ${
