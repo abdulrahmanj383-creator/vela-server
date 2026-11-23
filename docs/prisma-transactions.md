@@ -80,6 +80,36 @@ await this.prisma.$transaction([
 
 ## Anti-patterns to avoid
 
+## Migration rollback limits
+
+Prisma migrations are forward-only in the shared repository. Before applying a
+payment migration, take a database backup and confirm that the migration has
+been reviewed against the current production schema. `prisma migrate deploy`
+does not provide an automatic rollback command.
+
+When a deployment must be stopped:
+
+1. Stop application writes or route traffic to the previous compatible release.
+2. Record the migration name, database provider, and last successful backup.
+3. Restore the backup in an isolated database and verify payment, request, and
+   transaction counts before considering recovery.
+4. If the migration is additive and the old application can safely read the
+   new schema, roll the application back without deleting columns or rows.
+5. For destructive or incompatible changes, write and review a separate
+   forward migration. Do not hand-edit `_prisma_migrations` or use an ad-hoc
+   `DROP`, `DELETE`, or `TRUNCATE` as a rollback.
+
+Payment rows and Stellar transactions cannot be rolled back together: a
+database restore does not undo a transaction already submitted to Horizon.
+After recovery, reconcile locally stored hashes and statuses against Horizon
+before accepting new payment traffic. This project uses testnet for local and
+CI verification; never use production identifiers or keys in a rehearsal.
+
+For the release checklist, document the backup identifier, migration names,
+compatibility decision, and reconciliation result. If a schema change needs a
+coordinated application or protocol change, keep it as a separate migration
+and release rather than bundling an emergency rollback into an unrelated fix.
+
 ```typescript
 // Two separate writes — not atomic
 await this.prisma.payment.update({ where: { id }, data: { status: 'CONFIRMED' } });
